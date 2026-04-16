@@ -129,6 +129,8 @@ def _parse_devices(raw_list: list[dict]) -> dict[str, dict[str, Any]]:
     devices: dict[str, dict[str, Any]] = {}
 
     for entry in raw_list:
+        if not isinstance(entry, dict):
+            continue
         # The hub uses various key names across firmware versions
         mac = (
             entry.get("mac")
@@ -308,6 +310,8 @@ class PlusnetHub2Coordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
                 topo_body = await self._fetch(session, ENDPOINT_TOPOLOGY)
                 stations = _extract_js_variable(topo_body, JS_VAR_OWL_STATION)
                 for station in stations:
+                    if not isinstance(station, dict):
+                        continue
                     mac = (station.get("mac") or station.get("PhysAddress") or "").upper()
                     conn_type = station.get("ConnectionType") or station.get("connectionType") or ""
                     if mac:

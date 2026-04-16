@@ -1,0 +1,41 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Connect to Plusnet Hub 2 / BT Smart Hub 2",
+        "description": "Enter the details for your hub. The admin password is printed on the label on the back of your hub.",
+        "data": {
+          "host": "Hub IP address or hostname",
+          "username": "Username",
+          "password": "Admin password"
+        },
+        "data_description": {
+          "host": "Default is 192.168.1.254. Change only if you have a custom LAN setup.",
+          "username": "The hub username. Leave as 'admin' for most setups.",
+          "password": "The admin password printed on the label on the back of your hub."
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Unable to connect to the hub. Check the IP address and that the hub is online.",
+      "invalid_auth": "Authentication failed. Check the admin password on the label on the back of your hub.",
+      "unknown": "An unexpected error occurred. Check the Home Assistant logs for details."
+    },
+    "abort": {
+      "already_configured": "This hub is already configured."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Plusnet Hub 2 Options",
+        "data": {
+          "scan_interval": "Scan interval (seconds)"
+        },
+        "data_description": {
+          "scan_interval": "How often to poll the hub for connected devices (10–3600 seconds). Default: 30."
+        }
+      }
+    }
+  }
+}

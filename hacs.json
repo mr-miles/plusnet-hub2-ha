@@ -1,0 +1,7 @@
+{
+  "name": "Plusnet Hub 2 / BT Smart Hub 2",
+  "content_in_root": false,
+  "render_readme": false,
+  "homeassistant": "2023.1.0",
+  "filename": "plusnet_hub2.zip"
+}

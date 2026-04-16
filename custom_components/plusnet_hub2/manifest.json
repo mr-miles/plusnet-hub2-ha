@@ -1,0 +1,13 @@
+{
+  "domain": "plusnet_hub2",
+  "name": "Plusnet Hub 2 / BT Smart Hub 2",
+  "version": "1.0.0",
+  "codeowners": ["@plusnet-hub2-ha"],
+  "config_flow": true,
+  "documentation": "https://github.com/plusnet-hub2-ha/plusnet-hub2-ha",
+  "homekit": {},
+  "integration_type": "device",
+  "iot_class": "local_polling",
+  "loggers": ["custom_components.plusnet_hub2"],
+  "requirements": []
+}

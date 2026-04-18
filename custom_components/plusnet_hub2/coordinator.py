@@ -14,6 +14,7 @@ This coordinator always sends the required Referer header.
 
 from __future__ import annotations
 
+import html
 import json
 import logging
 import re
@@ -85,6 +86,11 @@ def _extract_js_variable(body: str, var_name: str) -> list[dict]:
         return []
 
     raw = match.group(1)
+
+    # HTML-decode entities the hub occasionally embeds in its CGI responses
+    # (e.g. &quot; → ", &amp; → &).  Without this step json.loads() raises
+    # "Expecting ',' delimiter" because it sees literal &quot; instead of ".
+    raw = html.unescape(raw)
 
     # URL-decode percent-encoded characters (e.g. %2E → .)
     raw = urllib.parse.unquote(raw)

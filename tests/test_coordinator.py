@@ -64,6 +64,24 @@ class TestExtractJsVariable:
         result = _extract_js_variable(body, "known_device_list")
         assert result[0]["hostname"] == "my laptop"
 
+    def test_html_entity_decodes_content(self):
+        """Hub may HTML-encode its CGI response (e.g. after certain firmware updates).
+
+        The raw response looks like:
+          known_device_list=[{&quot;mac&quot;:&quot;aa:bb:cc:dd:ee:01&quot;,...}];
+        Without html.unescape() this raises JSONDecodeError: Expecting ',' delimiter.
+        """
+        body = (
+            "known_device_list=[{&quot;mac&quot;:&quot;aa:bb:cc:dd:ee:01&quot;,"
+            "&quot;hostname&quot;:&quot;iphone&quot;,"
+            "&quot;ip&quot;:&quot;192.168.1.5&quot;,"
+            "&quot;Active&quot;:&quot;1&quot;}];"
+        )
+        result = _extract_js_variable(body, "known_device_list")
+        assert len(result) == 1
+        assert result[0]["mac"] == "aa:bb:cc:dd:ee:01"
+        assert result[0]["hostname"] == "iphone"
+
 
 # ---------------------------------------------------------------------------
 # Unit tests for _parse_devices

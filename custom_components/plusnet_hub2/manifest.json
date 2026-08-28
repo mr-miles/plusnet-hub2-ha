@@ -9,5 +9,5 @@
   "integration_type": "device",
   "iot_class": "local_polling",
   "loggers": ["custom_components.plusnet_hub2"],
-  "requirements": []
+  "requirements": ["json5==0.15.0"]
 }

@@ -38,10 +38,42 @@ var owl_tplg=[
 ];
 """
 
-MOCK_DEVICE_LIST_SINGLE_QUOTES = """\
+# Regression fixture: a device name containing an apostrophe embedded in
+# otherwise-valid double-quoted JSON (e.g. "Tom's iPhone"). This must not be
+# mistaken for a single-quoted JSON string delimiter.
+MOCK_DEVICE_LIST_APOSTROPHE = """\
 var known_device_list=[
-  {'mac':'bb:cc:dd:ee:ff:01','hostname':'desktop','ip':'192.168.1.60','Active':'1'}
+  {"mac":"cc:dd:ee:ff:00:01","hostname":"Tom's iPhone","ip":"192.168.1.70","Active":"1"},
+  {"mac":"cc:dd:ee:ff:00:02","hostname":"other-device","ip":"192.168.1.71","Active":"1"}
 ];
+"""
+
+# Regression fixture: a hostname containing a *percent-encoded* apostrophe
+# (%27) inside a single-quoted JS field value — the encoded form the hub
+# would actually send. Decoding the raw text before parsing (rather than
+# after) would turn %27 into a literal ' and terminate the JS string early,
+# reintroducing the same class of bug the double-quoted apostrophe fixture
+# above guards against.
+MOCK_DEVICE_LIST_ENCODED_APOSTROPHE = """\
+var known_device_list=[{mac:'AA%3ABB%3ACC%3A11%3A22%3A04',hostname:'O%27Brien%2DiPhone',ip:'192%2E168%2E1%2E13'}];
+"""
+
+# A structurally-faithful but anonymised excerpt modelled on an actual
+# /cgi/cgi_basicMyDevice.js response. Real hub firmware emits unquoted
+# object keys, single-quoted string values, and percent-encodes punctuation
+# in every field (mac, ip, hostname, dates, ...). The array is terminated by
+# a trailing `null` entry before `];`, and is immediately followed by other
+# unrelated `var`/`addCfg(...)` declarations in the same response body — the
+# extractor must stop at the first `];` and ignore everything after.
+# MAC addresses, IPs, hostnames and timestamps below are synthetic.
+MOCK_DEVICE_LIST_REAL_HUB_RESPONSE = """\
+var known_device_list=[{mac:'AA%3ABB%3ACC%3A11%3A22%3A01',hostname:'TestPhone',ip:'192%2E168%2E1%2E10',ipv6:'',name:'TestPhone',activity:'0',os:'iOS',device:'TestPhone',time_first_seen:'2026%2F01%2F01%2000%3A00%3A00',time_last_active:'2026%2F01%2F02%2000%3A00%3A00',port:'wl0',reconnected:'0'},
+{mac:'AA%3ABB%3ACC%3A11%3A22%3A02',hostname:'Smart%2DSpeaker',ip:'192%2E168%2E1%2E11',ipv6:'',name:'Smart%2DSpeaker',activity:'1',os:'Android',device:'STB',time_first_seen:'2026%2F01%2F01%2001%3A00%3A00',time_last_active:'2026%2F01%2F03%2000%3A00%3A00',port:'eth0',reconnected:'0'},
+{mac:'AA%3ABB%3ACC%3A11%3A22%3A03',hostname:'',ip:'192%2E168%2E1%2E12',ipv6:'',name:'unknown%5FAA%3ABB%3ACC%3A11%3A22%3A03',activity:'0',os:'Unknown',device:'Unknown',time_first_seen:'2026%2F01%2F01%2002%3A00%3A00',time_last_active:'2026%2F01%2F04%2000%3A00%3A00',port:'eth0',reconnected:'0'},
+null];
+var rate = [{timestamp:'0',app:'4294967295',mac:'00%3A00%3A00%3A00%3A00%3A00',tx:'656',rx:'0'},
+null];
+addCfg("dhcpreserve1",68681729,'192%2E168%2E1%2E250%2C00%3A24%3A9B%3A5B%3A5F%3AD1%2C');
 """
 
 # What _parse_devices / coordinator returns for the mock device list

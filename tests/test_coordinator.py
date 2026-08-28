@@ -15,9 +15,11 @@ from custom_components.plusnet_hub2.coordinator import (
 )
 
 from .conftest import (
+    MOCK_DEVICE_LIST_APOSTROPHE,
     MOCK_DEVICE_LIST_EMPTY,
+    MOCK_DEVICE_LIST_ENCODED_APOSTROPHE,
+    MOCK_DEVICE_LIST_REAL_HUB_RESPONSE,
     MOCK_DEVICE_LIST_RESPONSE,
-    MOCK_DEVICE_LIST_SINGLE_QUOTES,
     MOCK_OWL_RESPONSE,
 )
 
@@ -39,11 +41,74 @@ class TestExtractJsVariable:
         result = _extract_js_variable(MOCK_DEVICE_LIST_RESPONSE, "nonexistent_var")
         assert result == []
 
-    def test_parses_single_quoted_values(self):
-        result = _extract_js_variable(MOCK_DEVICE_LIST_SINGLE_QUOTES, "known_device_list")
+    def test_parses_hostname_with_apostrophe(self):
+        result = _extract_js_variable(MOCK_DEVICE_LIST_APOSTROPHE, "known_device_list")
+        assert len(result) == 2
+        assert result[0]["hostname"] == "Tom's iPhone"
+        assert result[1]["mac"] == "cc:dd:ee:ff:00:02"
+
+    def test_parses_percent_encoded_apostrophe_in_field_value(self):
+        """A %27 (percent-encoded apostrophe) inside a single-quoted JS value
+        must not be decoded before parsing, or it would terminate the JS
+        string early and break the surrounding structure.
+        """
+        result = _extract_js_variable(MOCK_DEVICE_LIST_ENCODED_APOSTROPHE, "known_device_list")
         assert len(result) == 1
-        assert result[0]["mac"] == "bb:cc:dd:ee:ff:01"
-        assert result[0]["hostname"] == "desktop"
+        assert result[0]["hostname"] == "O'Brien-iPhone"
+        assert result[0]["mac"] == "AA:BB:CC:11:22:04"
+        assert result[0]["ip"] == "192.168.1.13"
+
+    def test_parses_real_hub_response(self):
+        """Regression test modelled on an actual captured /cgi/cgi_basicMyDevice.js response.
+
+        Real firmware emits unquoted keys, single-quoted values, and
+        percent-encodes punctuation in every field — plus a trailing `null`
+        entry and other var/addCfg(...) declarations following in the same
+        body that must not be swept in.
+        """
+        result = _extract_js_variable(MOCK_DEVICE_LIST_REAL_HUB_RESPONSE, "known_device_list")
+        assert len(result) == 4  # 3 devices + trailing null
+        assert result[0]["mac"] == "AA:BB:CC:11:22:01"
+        assert result[0]["hostname"] == "TestPhone"
+        assert result[0]["ip"] == "192.168.1.10"
+        assert result[1]["hostname"] == "Smart-Speaker"
+        assert result[2]["hostname"] == ""
+        assert result[3] is None
+
+        devices = _parse_devices(result)
+        assert len(devices) == 3  # None entry filtered out
+        assert devices["AA:BB:CC:11:22:01"]["hostname"] == "TestPhone"
+        # hostname is blank, so it falls back to the hub's own "name" placeholder
+        assert devices["AA:BB:CC:11:22:03"]["hostname"] == "unknown_AA:BB:CC:11:22:03"
+        # activity:'0'/'1' is the real hub's connected-status field
+        assert devices["AA:BB:CC:11:22:01"]["connected"] is False  # activity:'0'
+        assert devices["AA:BB:CC:11:22:02"]["connected"] is True  # activity:'1'
+        assert devices["AA:BB:CC:11:22:03"]["connected"] is False  # activity:'0'
+
+    def test_returns_empty_list_on_malformed_js(self):
+        """Unparseable content (even after extraction) must not raise — just log and return []."""
+        body = "var known_device_list=[{mac:'AA:BB:CC:11:22:01',,,}];"
+        result = _extract_js_variable(body, "known_device_list")
+        assert result == []
+
+    def test_decodes_nested_list_of_lists(self):
+        """Some hub vars (e.g. dhcp_log) are arrays of arrays of strings, not
+        arrays of objects — URL-decoding must recurse into those too.
+        """
+        body = (
+            "var dhcp_log=[['192%2E168%2E1%2E242','0C%3A7E%3A24%3A22%3A02%3A42',"
+            "'garmin%2Dfenix8'],\nnull];"
+        )
+        result = _extract_js_variable(body, "dhcp_log")
+        assert result == [["192.168.1.242", "0C:7E:24:22:02:42", "garmin-fenix8"], None]
+
+    def test_object_keys_are_not_url_decoded(self):
+        """Only field *values* are URL-decoded — object keys must be left
+        untouched even if quoted and percent-encoded-looking.
+        """
+        body = "var known_device_list=[{'weird%2Dkey':'AA%3ABB%3ACC%3A11%3A22%3A01'}];"
+        result = _extract_js_variable(body, "known_device_list")
+        assert result[0] == {"weird%2Dkey": "AA:BB:CC:11:22:01"}
 
     def test_parses_empty_list(self):
         result = _extract_js_variable(MOCK_DEVICE_LIST_EMPTY, "known_device_list")
@@ -120,6 +185,31 @@ class TestParseDevices:
     def test_active_bool_false(self):
         raw = [{"mac": "aa:bb:cc:dd:ee:01", "hostname": "x", "ip": "", "Active": False}]
         assert _parse_devices(raw)["AA:BB:CC:DD:EE:01"]["connected"] is False
+
+    def test_activity_field_1_is_connected(self):
+        """Real BT Smart Hub 2 / Plusnet Hub 2 responses use "activity", not
+        "Active"/"active" — see MOCK_DEVICE_LIST_REAL_HUB_RESPONSE.
+        """
+        raw = [{"mac": "aa:bb:cc:dd:ee:01", "hostname": "x", "ip": "", "activity": "1"}]
+        assert _parse_devices(raw)["AA:BB:CC:DD:EE:01"]["connected"] is True
+
+    def test_activity_field_0_is_not_connected(self):
+        raw = [{"mac": "aa:bb:cc:dd:ee:01", "hostname": "x", "ip": "", "activity": "0"}]
+        assert _parse_devices(raw)["AA:BB:CC:DD:EE:01"]["connected"] is False
+
+    def test_active_key_takes_precedence_over_activity(self):
+        """If both keys are somehow present, the explicit "Active" wins."""
+        raw = [{"mac": "aa:bb:cc:dd:ee:01", "hostname": "x", "ip": "", "Active": "1", "activity": "0"}]
+        assert _parse_devices(raw)["AA:BB:CC:DD:EE:01"]["connected"] is True
+
+    def test_filters_none_entries(self):
+        """Arrays commonly end with a trailing `null` sentinel entry (see
+        commit 67538e8) — non-dict entries must be skipped, not raise.
+        """
+        raw = [None, {"mac": "aa:bb:cc:dd:ee:01", "hostname": "x", "ip": "", "Active": "1"}, None]
+        result = _parse_devices(raw)
+        assert len(result) == 1
+        assert "AA:BB:CC:DD:EE:01" in result
 
     def test_falls_back_to_mac_for_empty_hostname(self):
         raw = [{"mac": "aa:bb:cc:dd:ee:01", "hostname": "", "ip": "", "Active": "1"}]

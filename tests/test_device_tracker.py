@@ -42,8 +42,7 @@ class TestPlusnetHub2DeviceTracker:
     def _make_tracker(self, hass, mac="AA:BB:CC:DD:EE:01", coordinator_data=None):
         coordinator = _make_coordinator(hass, data=coordinator_data)
         fake_entry = _make_fake_entry()
-        initial_data = (coordinator_data or EXPECTED_DEVICES).get(mac, {})
-        return PlusnetHub2DeviceTracker(coordinator, fake_entry, mac, initial_data)
+        return PlusnetHub2DeviceTracker(coordinator, fake_entry, mac)
 
     def test_is_connected_returns_true_for_active_device(self, hass: HomeAssistant):
         tracker = self._make_tracker(hass, mac="AA:BB:CC:DD:EE:01")
@@ -74,15 +73,15 @@ class TestPlusnetHub2DeviceTracker:
         tracker = self._make_tracker(hass, mac="AA:BB:CC:DD:EE:01")
         assert tracker.hostname == "my-laptop"
 
-    def test_name_uses_hostname(self, hass: HomeAssistant):
+    def test_name_uses_hostname_and_mac(self, hass: HomeAssistant):
         tracker = self._make_tracker(hass, mac="AA:BB:CC:DD:EE:01")
-        assert tracker.name == "my-laptop"
+        assert tracker.name == "my-laptop (AA:BB:CC:DD:EE:01)"
 
     def test_name_falls_back_to_mac(self, hass: HomeAssistant):
         data = {
             "AA:BB:CC:DD:EE:99": {
                 "mac": "AA:BB:CC:DD:EE:99",
-                "hostname": "AA:BB:CC:DD:EE:99",
+                "hostname": "",
                 "ip": "",
                 "connected": True,
             }
@@ -93,6 +92,11 @@ class TestPlusnetHub2DeviceTracker:
     def test_unique_id_format(self, hass: HomeAssistant):
         tracker = self._make_tracker(hass, mac="AA:BB:CC:DD:EE:01")
         assert tracker.unique_id == "plusnet_hub2_aa_bb_cc_dd_ee_01"
+
+    def test_entity_id_is_derived_from_mac(self, hass: HomeAssistant):
+        """entity_id must stay stable even if the hostname changes later."""
+        tracker = self._make_tracker(hass, mac="AA:BB:CC:DD:EE:01")
+        assert tracker.entity_id == "device_tracker.aa_bb_cc_dd_ee_01"
 
     def test_extra_state_attributes_includes_connection_type(self, hass: HomeAssistant):
         tracker = self._make_tracker(hass, mac="AA:BB:CC:DD:EE:01")

@@ -20,6 +20,7 @@ from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
+from homeassistant.util import slugify
 
 from .const import CONF_HOST, DOMAIN, MANUFACTURER
 from .coordinator import PlusnetHub2Coordinator
@@ -42,11 +43,11 @@ async def async_setup_entry(
     def _add_new_devices() -> None:
         """Add entities for any newly discovered MACs."""
         new_entities: list[PlusnetHub2DeviceTracker] = []
-        for mac, device_data in coordinator.data.items():
+        for mac in coordinator.data:
             if mac not in tracked_macs:
                 tracked_macs.add(mac)
                 new_entities.append(
-                    PlusnetHub2DeviceTracker(coordinator, entry, mac, device_data)
+                    PlusnetHub2DeviceTracker(coordinator, entry, mac)
                 )
         if new_entities:
             _LOGGER.debug("Adding %d new device tracker entities", len(new_entities))
@@ -70,14 +71,12 @@ class PlusnetHub2DeviceTracker(
     """
 
     _attr_source_type = SourceType.ROUTER
-    _attr_has_entity_name = True
 
     def __init__(
         self,
         coordinator: PlusnetHub2Coordinator,
         entry: ConfigEntry,
         mac: str,
-        initial_data: dict[str, Any],
     ) -> None:
         super().__init__(coordinator)
         self._mac = mac
@@ -86,8 +85,11 @@ class PlusnetHub2DeviceTracker(
         # Unique ID is stable and based on MAC
         self._attr_unique_id = f"{DOMAIN}_{mac.lower().replace(':', '_')}"
 
-        # Use hostname as the name; will update from coordinator data
-        self._attr_name = initial_data.get("hostname") or mac
+        # Pin entity_id to the MAC so it stays stable even if the hub
+        # reports a different hostname later (renamed device, DHCP churn,
+        # etc). Without this, HA derives the object_id from `name` below,
+        # which changes with the hostname and can collide across devices.
+        self.entity_id = f"{DEVICE_TRACKER_DOMAIN}.{slugify(mac)}"
 
     # ------------------------------------------------------------------
     # ScannerEntity properties
@@ -121,8 +123,10 @@ class PlusnetHub2DeviceTracker(
 
     @property
     def name(self) -> str:
-        """Use the hostname as entity name, falling back to MAC."""
-        return self.hostname or self._mac
+        """Return "<hostname> (<mac>)", or just the MAC if no hostname is known."""
+        if hostname := self.hostname:
+            return f"{hostname} ({self._mac})"
+        return self._mac
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
